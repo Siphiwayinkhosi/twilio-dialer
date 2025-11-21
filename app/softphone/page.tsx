@@ -3,121 +3,208 @@
 import { useEffect, useState } from "react";
 import type { Device as DeviceType, Call as CallType } from "@twilio/voice-sdk";
 import { Device } from "@twilio/voice-sdk";
+import AppShell from "@/components/AppShell";
+import RecentCalls from "./RecentCalls";
 
 type DeviceState = DeviceType | null;
 type CallState = CallType | null;
 
-export default function Softphone() {
+type CallStatus =
+  | "Loading"
+  | "Fetching token"
+  | "Connecting"
+  | "Ready"
+  | "Dialing"
+  | "Ringing"
+  | "On call"
+  | "Ended"
+  | "Error";
+
+type CallLogPayload = {
+  to: string;
+  from: string;
+  startedAt: string;
+  endedAt: string;
+  durationSeconds: number;
+  status: string;
+};
+
+const contacts = [
+  { name: "Lead 1", number: "+26879123456" },
+  { name: "Lead 2", number: "+26879234567" },
+  { name: "Office", number: "+493042430344" },
+];
+
+export default function SoftphonePage() {
   const [device, setDevice] = useState<DeviceState>(null);
   const [call, setCall] = useState<CallState>(null);
-  const [status, setStatus] = useState("Initializing…");
+  const [status, setStatus] = useState<CallStatus>("Loading");
   const [numberToCall, setNumberToCall] = useState("");
   const [muted, setMuted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // 🔹 Init Device
+  const [callStart, setCallStart] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [currentTo, setCurrentTo] = useState<string | null>(null);
+
+  // ---------- INIT DEVICE ----------
   useEffect(() => {
     let dev: DeviceType | null = null;
 
-    const setup = async () => {
+    const init = async () => {
       try {
-        setStatus("Fetching token…");
+        setStatus("Fetching token");
         const res = await fetch("/api/token");
         const data = await res.json();
 
         if (!data.token) {
-          setStatus("Token error");
+          setStatus("Error");
+          setError("Token error");
           return;
         }
 
-        dev = new Device(data.token, {
-          logLevel: 1,
-        });
+        dev = new Device(data.token, { logLevel: 1 });
 
-        // Device events (v2 SDK)
-        dev.on("registering", () => setStatus("Registering…"));
+        dev.on("registering", () => setStatus("Connecting"));
         dev.on("registered", () => setStatus("Ready"));
-        dev.on("unregistered", () => setStatus("Offline"));
+        dev.on("unregistered", () => setStatus("Error"));
 
-        dev.on("error", (err) => {
-          console.error("Device error:", err);
-          setStatus("Device error");
+        dev.on("error", (e) => {
+          console.error("Device error:", e);
+          setStatus("Error");
+          setError("Device error");
         });
 
         dev.on("incoming", (incomingCall) => {
-          setStatus("Incoming call…");
-          bindCallEvents(incomingCall);
-          incomingCall.accept(); // auto-accept for now
+          setStatus("Ringing");
+          bindCallEvents(
+            incomingCall,
+            incomingCall.parameters?.From || "Unknown"
+          );
+          incomingCall.accept();
         });
 
-        // MUST register for incoming & to be “Ready”
         await dev.register();
-
         setDevice(dev);
-      } catch (err) {
-        console.error("Init error:", err);
-        setStatus("Init failed");
+      } catch (e) {
+        console.error("Init error:", e);
+        setStatus("Error");
+        setError("Initialization failed");
       }
     };
 
-    setup();
-
-    return () => {
-      if (dev) {
-        dev.destroy();
-      }
-    };
+    init();
+    return () => dev?.destroy();
   }, []);
 
-  // 🔹 Attach events to Call
-  const bindCallEvents = (c: CallType) => {
-    setCall(c);
+  // ---------- TIMER ----------
+  useEffect(() => {
+    if (!callStart) {
+      setElapsed(0);
+      return;
+    }
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - callStart) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [callStart]);
 
-    c.on("ringing", () => setStatus("Ringing…"));
-    c.on("accept", () => setStatus("On call"));
-    c.on("disconnect", () => {
-      setStatus("Ready");
-      setCall(null);
-      setMuted(false);
-    });
-    c.on("cancel", () => {
-      setStatus("Canceled");
-      setCall(null);
-      setMuted(false);
-    });
-    c.on("error", (err) => {
-      console.error("Call error:", err);
-      setStatus("Call error");
-      setCall(null);
-      setMuted(false);
-    });
+  const formatTime = (sec: number) => {
+    const m = Math.floor(sec / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (sec % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
   };
 
-  // 🔹 Start outgoing call (IMPORTANT: await device.connect)
-const startCall = async () => {
-  if (!device || !numberToCall) return;
-
-  try {
-    setStatus("Dialing…");
-
-    const outgoingCall = await device.connect({
-      params: { To: numberToCall },
-    });
-
-    bindCallEvents(outgoingCall);
-  } catch (err) {
-    console.error("Connect error:", err);
-    setStatus("Call failed");
-    setCall(null);
-  }
-};
-
-
-
-  const hangUp = () => {
-    if (call) {
-      call.disconnect();
+  const saveLog = async (payload: CallLogPayload) => {
+    try {
+      await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      console.error("Failed to save call log", e);
     }
   };
+
+  const bindCallEvents = (c: CallType, toNumber: string) => {
+    setCall(c);
+
+    c.on("ringing", () => setStatus("Ringing"));
+    c.on("accept", () => {
+      setStatus("On call");
+      setCallStart(Date.now());
+    });
+
+    const finalize = (reason: string) => {
+      setStatus("Ended");
+      const start = callStart || Date.now();
+      const end = Date.now();
+      const durationSeconds = Math.max(0, Math.floor((end - start) / 1000));
+
+      if (currentTo || toNumber) {
+        const payload: CallLogPayload = {
+          to: currentTo || toNumber,
+          from: "+493042430344",
+          startedAt: new Date(start).toISOString(),
+          endedAt: new Date(end).toISOString(),
+          durationSeconds,
+          status: reason,
+        };
+        saveLog(payload);
+      }
+
+      setCall(null);
+      setMuted(false);
+      setCallStart(null);
+      setCurrentTo(null);
+    };
+
+    c.on("disconnect", () => finalize("completed"));
+    c.on("cancel", () => finalize("canceled"));
+    c.on("error", (e) => {
+      console.error("Call error:", e);
+      setError("Call failed");
+      finalize("error");
+    });
+  };
+
+  const validateNumber = (value: string) => {
+    if (!value) return "Please enter a number";
+    if (!value.startsWith("+"))
+      return "Number should start with + and country code";
+    if (!/^\+\d{6,16}$/.test(value))
+      return "Use only digits after + (6–16 digits total)";
+    return null;
+  };
+
+  const startCall = async () => {
+    if (!device) return;
+
+    const validationError = validateNumber(numberToCall.trim());
+    setError(validationError);
+    if (validationError) return;
+
+    try {
+      setStatus("Dialing");
+      setCurrentTo(numberToCall.trim());
+
+      const outgoingCall = await device.connect({
+        params: { To: numberToCall.trim() },
+      });
+
+      bindCallEvents(outgoingCall, numberToCall.trim());
+    } catch (e) {
+      console.error("Connect error:", e);
+      setStatus("Error");
+      setError("Could not start call");
+      setCall(null);
+    }
+  };
+
+  const hangUp = () => call?.disconnect();
 
   const toggleMute = () => {
     if (!call) return;
@@ -126,54 +213,151 @@ const startCall = async () => {
     setMuted(next);
   };
 
+  const onSelectContact = (num: string) => {
+    setNumberToCall(num);
+    setError(null);
+  };
+
+  const statusColor = (() => {
+    switch (status) {
+      case "Ready":
+        return "bg-emerald-900/40 text-emerald-300 border-emerald-500/50";
+      case "On call":
+        return "bg-blue-900/40 text-blue-300 border-blue-500/50";
+      case "Dialing":
+      case "Ringing":
+      case "Connecting":
+        return "bg-amber-900/40 text-amber-300 border-amber-500/50";
+      case "Error":
+        return "bg-red-900/40 text-red-300 border-red-500/50";
+      default:
+        return "bg-slate-800 text-slate-200 border-slate-600/60";
+    }
+  })();
+
   return (
-    <main className="min-h-screen bg-slate-950 flex items-center justify-center text-white p-4">
-      <div className="max-w-md w-full bg-slate-900 p-6 rounded-xl shadow-lg border border-slate-800">
-        <h1 className="text-2xl font-bold text-center mb-4">
-          Web Softphone (Twilio Voice SDK)
-        </h1>
+    <AppShell
+      title="Softphone"
+      subtitle="Call clients directly from the browser using your Twilio number."
+    >
+      <div className="grid md:grid-cols-[260px,1fr] gap-6">
+        {/* CONTACTS */}
+        <aside className="bg-[#0d0f12] border border-slate-800/70 rounded-2xl p-5 hidden md:block">
+          <h2 className="text-sm font-semibold text-slate-300 mb-3">
+            Quick Contacts
+          </h2>
+          <div className="space-y-2">
+            {contacts.map((c) => (
+              <button
+                key={c.number}
+                onClick={() => onSelectContact(c.number)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 transition"
+              >
+                <span className="text-sm">{c.name}</span>
+                <span className="text-xs text-slate-400">{c.number}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
 
-        <p className="text-center mb-4 text-slate-300">
-          Status: <span className="text-orange-400">{status}</span>
-        </p>
-
-        <input
-          type="tel"
-          placeholder="+26878473557"
-          value={numberToCall}
-          onChange={(e) => setNumberToCall(e.target.value)}
-          className="w-full p-2 bg-slate-800 border border-slate-700 rounded mb-4"
-        />
-
-        {!call ? (
-          <button
-            onClick={startCall}
-            disabled={!numberToCall || !device}
-            className="w-full bg-orange-500 py-2 rounded hover:bg-orange-600 disabled:opacity-50"
-          >
-            Start Call
-          </button>
-        ) : (
-          <>
-            <button
-              onClick={hangUp}
-              className="w-full bg-red-500 py-2 rounded hover:bg-red-600 mb-2"
+        {/* MAIN PANEL */}
+        <section className="bg-[#0d0f12] border border-slate-800/70 rounded-2xl p-6 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <span
+              className={`px-3 py-1 text-xs rounded-full border ${statusColor}`}
             >
-              Hang Up
-            </button>
-            <button
-              onClick={toggleMute}
-              className="w-full bg-slate-700 py-2 rounded hover:bg-slate-600"
-            >
-              {muted ? "Unmute" : "Mute"}
-            </button>
-          </>
-        )}
+              {status}
+            </span>
+            <span className="hidden md:inline text-xs text-slate-500">
+              Recording active (Twilio)
+            </span>
+          </div>
 
-        <p className="text-xs text-slate-500 text-center mt-4">
-          Browser ↔ PSTN via Twilio WebRTC.
-        </p>
+          {/* Mobile contacts */}
+          <div className="md:hidden mb-4">
+            <h2 className="text-xs font-semibold text-slate-300 mb-2">
+              Quick Contacts
+            </h2>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {contacts.map((c) => (
+                <button
+                  key={c.number}
+                  onClick={() => onSelectContact(c.number)}
+                  className="flex-shrink-0 px-3 py-2 rounded-xl bg-slate-900/70 hover:bg-slate-800 text-xs text-left"
+                >
+                  <div>{c.name}</div>
+                  <div className="text-[10px] text-slate-400">{c.number}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* NUMBER INPUT */}
+          <div className="mb-4">
+            <input
+              type="tel"
+              placeholder="+26879446674"
+              value={numberToCall}
+              onChange={(e) => {
+                setNumberToCall(e.target.value);
+                setError(null);
+              }}
+              className="w-full text-lg p-3 rounded-xl bg-[#151820] border border-slate-700 focus:border-orange-500 focus:outline-none text-center"
+            />
+            {error && (
+              <p className="text-xs text-red-400 mt-1 text-center">{error}</p>
+            )}
+          </div>
+
+          {/* TIMER + CURRENT CALLEE */}
+          <div className="flex items-center justify-between mb-6 text-sm text-slate-400">
+            <span>
+              {currentTo ? (
+                <>
+                  Calling{" "}
+                  <span className="text-slate-200 font-mono">{currentTo}</span>
+                </>
+              ) : (
+                "No active call"
+              )}
+            </span>
+            <span className="font-mono text-slate-300">
+              {callStart ? formatTime(elapsed) : "00:00"}
+            </span>
+          </div>
+
+          {/* BUTTONS */}
+          <div className="mt-auto space-y-3">
+            {!call ? (
+              <button
+                onClick={startCall}
+                disabled={!device}
+                className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-lg font-semibold flex items-center justify-center gap-2 transition"
+              >
+                📞 Start Call
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={hangUp}
+                  className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 text-lg font-semibold flex items-center justify-center gap-2 transition"
+                >
+                  🔴 Hang Up
+                </button>
+                <button
+                  onClick={toggleMute}
+                  className="w-full py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-sm font-medium flex items-center justify-center gap-2 transition"
+                >
+                  {muted ? "Unmute 🔊" : "Mute 🔇"}
+                </button>
+              </>
+            )}
+          </div>
+        </section>
       </div>
-    </main>
+      <RecentCalls/>
+
+    </AppShell>
   );
 }
+

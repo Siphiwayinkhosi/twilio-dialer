@@ -22,10 +22,18 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    voice.dial(
+   {/*voice.dial(
       { callerId: process.env.TWILIO_NUMBER },
       to
+    );*/} 
+    voice.dial(
+      {
+        callerId: process.env.TWILIO_NUMBER,
+        record: "record-from-answer-dual", // 🔴 enable recording (check legal rules!)
+      },
+      to
     );
+    
 
     return new Response(voice.toString(), {
       status: 200,
