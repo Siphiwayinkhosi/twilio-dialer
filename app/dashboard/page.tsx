@@ -3,51 +3,57 @@
 import { useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 
-type CallLog = {
+// -----------------------------
+// TypeScript Interface
+// -----------------------------
+interface CallLog {
   id: number;
-  to_number: string;
-  from_number: string;
-  started_at: string;
-  ended_at: string;
-  duration_seconds: number;
+  to: string;
+  from: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  durationSeconds: number;
   status: string;
-};
+}
 
 export default function DashboardPage() {
   const [logs, setLogs] = useState<CallLog[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ---------- FETCH CALL LOGS ----------
- const fetchLogs = async () => {
-  try {
-    const res = await fetch("/api/logs");
-    const raw = await res.json();
+  // -----------------------------
+  // Fetch logs
+  // -----------------------------
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch("/api/logs");
+      const raw = await res.json();
 
-    const normalized = raw.map((l: any) => ({
-      id: l.id,
-      to: l.to_number,
-      from: l.from_number,
-      startedAt: l.started_at,
-      endedAt: l.ended_at,
-      durationSeconds: l.duration_seconds,
-      status: l.status,
-    }));
+      const normalized: CallLog[] = raw.map((l: any) => ({
+        id: l.id,
+        to: l.to_number,
+        from: l.from_number,
+        startedAt: l.started_at,
+        endedAt: l.ended_at,
+        durationSeconds: l.duration_seconds ?? 0,
+        status: l.status,
+      }));
 
-    setLogs(normalized);
-  } catch (error) {
-    console.error("Failed to load logs", error);
-  } finally {
-    setLoading(false);
-  }
-};
+      setLogs(normalized);
+    } catch (error) {
+      console.error("Failed to load logs", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-
-  // ---------- INITIAL LOAD ----------
+  // Initial load
   useEffect(() => {
     fetchLogs();
   }, []);
 
-  // ---------- REAL-TIME SSE LISTENER ----------
+  // -----------------------------
+  // Real-time SSE
+  // -----------------------------
   useEffect(() => {
     const events = new EventSource("/api/events");
 
@@ -56,8 +62,7 @@ export default function DashboardPage() {
         const data = JSON.parse(event.data);
 
         if (data.type === "call_update") {
-          console.log("🔥 Real-time update received:", data.payload);
-          fetchLogs(); // refresh dashboard instantly
+          fetchLogs();
         }
       } catch (err) {
         console.error("SSE parse error:", err);
@@ -71,43 +76,53 @@ export default function DashboardPage() {
     return () => events.close();
   }, []);
 
-  // ---------- STATS ----------
+  // -----------------------------
+  // Stats
+  // -----------------------------
   const totalCalls = logs.length;
   const totalSeconds = logs.reduce(
-    (sum, l) => sum + (l.duration_seconds || 0),
+    (sum, l) => sum + (l.durationSeconds || 0),
     0
   );
   const totalMinutes = Math.round(totalSeconds / 60);
 
- const formatTime = (iso: string | null) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
+  // -----------------------------
+  // Format helpers
+  // -----------------------------
+  const formatTime = (iso: string | null) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
 
-  return d.toLocaleString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-  });
-};
+    return d.toLocaleString("en-GB", {
+      timeZone: "Africa/Mbabane",
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  };
 
+  const formatDuration = (sec: number | null) => {
+    if (!sec || isNaN(sec)) return "0s";
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}m ${s}s`;
+  };
 
-const formatDuration = (sec: number | null) => {
-  if (!sec || isNaN(sec)) return "0s";
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}m ${s}s`;
-};
-
-
+  // -----------------------------
+  // Render
+  // -----------------------------
   return (
     <AppShell
       title="Analytics"
       subtitle="Monitor outbound calls from the Sandweg softphone in real time."
     >
       <div className="space-y-6">
-        {/* ---------- STATS CARDS ---------- */}
+        {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4">
             <p className="text-xs text-slate-400 mb-1">Total Calls</p>
@@ -129,7 +144,7 @@ const formatDuration = (sec: number | null) => {
           </div>
         </div>
 
-        {/* ---------- TABLE ---------- */}
+        {/* Table */}
         <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4">
           <h2 className="text-sm font-semibold mb-3">Recent Calls</h2>
 
@@ -159,19 +174,19 @@ const formatDuration = (sec: number | null) => {
                       className="border-b border-slate-900/80 last:border-b-0"
                     >
                       <td className="py-2 font-mono text-xs sm:text-sm">
-                        {log.to_number}
+                        {log.to}
                       </td>
 
                       <td className="py-2 text-xs text-slate-400 hidden sm:table-cell">
-                        {log.from_number}
+                        {log.from}
                       </td>
 
                       <td className="py-2 text-xs sm:text-sm">
-                        {formatTime(log.started_at)}
+                        {formatTime(log.startedAt)}
                       </td>
 
                       <td className="py-2 text-xs sm:text-sm">
-                        {formatDuration(log.duration_seconds)}
+                        {formatDuration(log.durationSeconds)}
                       </td>
 
                       <td className="py-2 text-xs sm:text-sm capitalize">
@@ -188,4 +203,3 @@ const formatDuration = (sec: number | null) => {
     </AppShell>
   );
 }
-

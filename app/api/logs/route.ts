@@ -25,6 +25,10 @@ export async function POST(req: Request) {
       status,
     } = body;
 
+    // Ensure timestamps include timezone (ISO string)
+    const started = startedAt ? new Date(startedAt).toISOString() : null;
+    const ended = endedAt ? new Date(endedAt).toISOString() : null;
+
     const result = await sql`
       INSERT INTO call_logs (
         to_number,
@@ -37,21 +41,27 @@ export async function POST(req: Request) {
       VALUES (
         ${to},
         ${from},
-        ${startedAt}::timestamptz,
-         ${endedAt}::timestamptz,
-
+        ${started}::timestamptz,
+        ${ended}::timestamptz,
         ${durationSeconds},
         ${status}
       )
       RETURNING *
     `;
 
-    // 🔥 broadcast realtime event (if SSE is connected)
     const broadcast = (globalThis as any).broadcast;
     if (broadcast) {
       broadcast({
         type: "call_update",
-        payload: result[0],
+        payload: {
+          id: result[0].id,
+          to: result[0].to_number,
+          from: result[0].from_number,
+          startedAt: result[0].started_at,
+          endedAt: result[0].ended_at,
+          durationSeconds: result[0].duration_seconds ?? 0,
+          status: result[0].status,
+        },
       });
     }
 

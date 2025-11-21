@@ -3,10 +3,18 @@ import { sql } from "@/lib/db";
 
 export async function GET() {
   try {
-    const result = await sql`SELECT NOW()`;
-    return NextResponse.json({ success: true, result });
-  } catch (e) {
+    const rows = await sql`SELECT * FROM users;`;
+    return NextResponse.json({ success: true, data: rows });
+  } catch (e: unknown) {
     console.error(e);
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+
+    const message =
+      e instanceof Error ? e.message : "Unknown server error";
+
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 500 }
+    );
   }
 }
+
