@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+
 import { NextResponse } from "next/server";
 import twilio from "twilio";
 
@@ -35,4 +37,3 @@ export async function GET() {
     return NextResponse.json({ error: "Token failed" }, { status: 500 });
   }
 }
-

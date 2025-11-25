@@ -1,3 +1,6 @@
+// FORCE NODE RUNTIME (CRITICAL FOR TWILIO)
+export const runtime = "nodejs";
+
 import { NextRequest } from "next/server";
 import twilio from "twilio";
 
