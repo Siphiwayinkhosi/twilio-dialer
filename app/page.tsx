@@ -77,6 +77,7 @@ export default function SoftphonePage() {
           setError("Device error");
         });
 
+        // Incoming call
         dev.on("incoming", (incomingCall) => {
           setStatus("Ringing");
           bindCallEvents(incomingCall, incomingCall.parameters?.From || "Unknown");
@@ -213,7 +214,7 @@ export default function SoftphonePage() {
     setMuted(next);
   };
 
-  // ⭐ SPEAKER ONLY (HOLD REMOVED)
+  // ⭐ SPEAKER ONLY — HOLD REMOVED COMPLETELY
   const toggleSpeaker = () => {
     if (!device) return;
     const next = !speaker;
@@ -410,7 +411,6 @@ export default function SoftphonePage() {
                     {speaker ? "Speaker Off" : "Speaker On"}
                   </button>
 
-                  {/* Empty placeholder if you want equal spacing */}
                   <div></div>
                 </div>
               </>
@@ -419,9 +419,7 @@ export default function SoftphonePage() {
         </section>
       </div>
 
-      {/* RECENT CALLS */}
       <RecentCalls />
     </AppShell>
   );
 }
-// update
