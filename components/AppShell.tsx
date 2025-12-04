@@ -11,7 +11,7 @@ type AppShellProps = {
 };
 
 const navItems = [
-  { href: "/softphone", label: "Softphone" },
+ 
   { href: "/dashboard", label: "Analytics" },
 ];
 

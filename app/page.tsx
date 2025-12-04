@@ -5,7 +5,7 @@ import type { Device as DeviceType, Call as CallType } from "@twilio/voice-sdk";
 import { Device } from "@twilio/voice-sdk";
 import AppShell from "@/components/AppShell";
 import RecentCalls from "@/components/RecentCalls";
-
+import Keypad from "@/components/Keypad";
 
 type DeviceState = DeviceType | null;
 type CallState = CallType | null;
@@ -42,6 +42,11 @@ export default function SoftphonePage() {
   const [status, setStatus] = useState<CallStatus>("Loading");
   const [numberToCall, setNumberToCall] = useState("");
   const [muted, setMuted] = useState(false);
+
+  // ⭐ NEW — Upgrade 4 states
+  const [hold, setHold] = useState(false);
+  const [speaker, setSpeaker] = useState(false);
+
   const [error, setError] = useState<string | null>(null);
 
   const [callStart, setCallStart] = useState<number | null>(null);
@@ -78,10 +83,7 @@ export default function SoftphonePage() {
 
         dev.on("incoming", (incomingCall) => {
           setStatus("Ringing");
-          bindCallEvents(
-            incomingCall,
-            incomingCall.parameters?.From || "Unknown"
-          );
+          bindCallEvents(incomingCall, incomingCall.parameters?.From || "Unknown");
           incomingCall.accept();
         });
 
@@ -159,6 +161,8 @@ export default function SoftphonePage() {
 
       setCall(null);
       setMuted(false);
+      setHold(false);
+      setSpeaker(false);
       setCallStart(null);
       setCurrentTo(null);
     };
@@ -214,6 +218,30 @@ export default function SoftphonePage() {
     setMuted(next);
   };
 
+  // ⭐ NEW — Hold
+  const toggleHold = () => {
+    if (!call) return;
+    const next = !hold;
+    try {
+      call.hold(next);
+      setHold(next);
+    } catch (e) {
+      console.error("Hold error:", e);
+    }
+  };
+
+  // ⭐ NEW — Speaker
+  const toggleSpeaker = () => {
+    if (!device) return;
+    const next = !speaker;
+    try {
+      Device.audio?.toggleSpeaker(next);
+      setSpeaker(next);
+    } catch (e) {
+      console.error("Speaker error:", e);
+    }
+  };
+
   const onSelectContact = (num: string) => {
     setNumberToCall(num);
     setError(null);
@@ -242,6 +270,7 @@ export default function SoftphonePage() {
       subtitle="Call clients directly from the browser using your Twilio number."
     >
       <div className="grid md:grid-cols-[260px,1fr] gap-6">
+        
         {/* CONTACTS */}
         <aside className="bg-[#0d0f12] border border-slate-800/70 rounded-2xl p-5 hidden md:block">
           <h2 className="text-sm font-semibold text-slate-300 mb-3">
@@ -263,10 +292,10 @@ export default function SoftphonePage() {
 
         {/* MAIN PANEL */}
         <section className="bg-[#0d0f12] border border-slate-800/70 rounded-2xl p-6 flex flex-col">
+
+          {/* STATUS */}
           <div className="flex items-center justify-between mb-4">
-            <span
-              className={`px-3 py-1 text-xs rounded-full border ${statusColor}`}
-            >
+            <span className={`px-3 py-1 text-xs rounded-full border ${statusColor}`}>
               {status}
             </span>
             <span className="hidden md:inline text-xs text-slate-500">
@@ -284,7 +313,7 @@ export default function SoftphonePage() {
                 <button
                   key={c.number}
                   onClick={() => onSelectContact(c.number)}
-                  className="flex-shrink-0 px-3 py-2 rounded-xl bg-slate-900/70 hover:bg-slate-800 text-xs text-left"
+                  className="flex-shrink-0 px-3py-2 rounded-xl bg-slate-900/70 hover:bg-slate-800 text-xs text-left"
                 >
                   <div>{c.name}</div>
                   <div className="text-[10px] text-slate-400">{c.number}</div>
@@ -293,8 +322,8 @@ export default function SoftphonePage() {
             </div>
           </div>
 
-          {/* NUMBER INPUT */}
-          <div className="mb-4">
+          {/* INPUT */}
+          <div className="mb-4 relative">
             <input
               type="tel"
               placeholder="+26879446674"
@@ -303,14 +332,48 @@ export default function SoftphonePage() {
                 setNumberToCall(e.target.value);
                 setError(null);
               }}
-              className="w-full text-lg p-3 rounded-xl bg-[#151820] border border-slate-700 focus:border-orange-500 focus:outline-none text-center"
+              className="
+                w-full text-lg p-3 pr-12
+                rounded-xl 
+                bg-[#151820] 
+                border border-slate-700 
+                focus:border-orange-500 
+                focus:outline-none 
+                text-center
+              "
             />
-            {error && (
-              <p className="text-xs text-red-400 mt-1 text-center">{error}</p>
+
+            {numberToCall.length > 0 && (
+              <button
+                onClick={() => {
+                  setNumberToCall((prev) => prev.slice(0, -1));
+                  setError(null);
+                }}
+                className="
+                  absolute right-3 top-1/2 -translate-y-1/2
+                  text-slate-400 
+                  hover:text-white 
+                  text-2xl 
+                  transition 
+                  active:scale-90
+                "
+              >
+                ⌫
+              </button>
             )}
+
+            {error && <p className="text-xs text-red-400 mt-1 text-center">{error}</p>}
           </div>
 
-          {/* TIMER + CURRENT CALLEE */}
+          {/* KEYPAD */}
+          <Keypad
+            onPress={(digit) => {
+              setNumberToCall((prev) => prev + digit);
+              setError(null);
+            }}
+          />
+
+          {/* TIMER */}
           <div className="flex items-center justify-between mb-6 text-sm text-slate-400">
             <span>
               {currentTo ? (
@@ -327,7 +390,7 @@ export default function SoftphonePage() {
             </span>
           </div>
 
-          {/* BUTTONS */}
+          {/* ⭐ BUTTON BAR WITH HOLD + SPEAKER + MUTE */}
           <div className="mt-auto space-y-3">
             {!call ? (
               <button
@@ -339,26 +402,45 @@ export default function SoftphonePage() {
               </button>
             ) : (
               <>
+                {/* HANG UP */}
                 <button
                   onClick={hangUp}
                   className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 text-lg font-semibold flex items-center justify-center gap-2 transition"
                 >
                   🔴 Hang Up
                 </button>
-                <button
-                  onClick={toggleMute}
-                  className="w-full py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-sm font-medium flex items-center justify-center gap-2 transition"
-                >
-                  {muted ? "Unmute 🔊" : "Mute 🔇"}
-                </button>
+
+                {/* NEW CONTROL BAR */}
+                <div className="grid grid-cols-3 gap-3 mt-3">
+                  <button
+                    onClick={toggleHold}
+                    className="py-2 bg-slate-700 rounded-xl hover:bg-slate-600 text-sm transition"
+                  >
+                    {hold ? "Unhold" : "Hold"}
+                  </button>
+
+                  <button
+                    onClick={toggleMute}
+                    className="py-2 bg-slate-700 rounded-xl hover:bg-slate-600 text-sm transition"
+                  >
+                    {muted ? "Unmute" : "Mute"}
+                  </button>
+
+                  <button
+                    onClick={toggleSpeaker}
+                    className="py-2 bg-slate-700 rounded-xl hover:bg-slate-600 text-sm transition"
+                  >
+                    {speaker ? "Speaker Off" : "Speaker On"}
+                  </button>
+                </div>
               </>
             )}
           </div>
         </section>
       </div>
-      <RecentCalls/>
 
+      {/* RECENT CALLS */}
+      <RecentCalls />
     </AppShell>
   );
 }
-
