@@ -214,17 +214,13 @@ export default function SoftphonePage() {
     setMuted(next);
   };
 
-  // ⭐ SPEAKER ONLY — HOLD REMOVED COMPLETELY
-  const toggleSpeaker = () => {
-    if (!device) return;
-    const next = !speaker;
-    try {
-      Device.audio?.toggleSpeaker(next);
-      setSpeaker(next);
-    } catch (e) {
-      console.error("Speaker error:", e);
-    }
-  };
+  
+  // ⭐ SAFE SPEAKER TOGGLE (NO TWILIO API) — VERCEL FRIENDLY
+const toggleSpeaker = () => {
+  const next = !speaker;
+  setSpeaker(next);
+};
+
 
   const onSelectContact = (num: string) => {
     setNumberToCall(num);
