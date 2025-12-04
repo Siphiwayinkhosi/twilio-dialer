@@ -42,11 +42,7 @@ export default function SoftphonePage() {
   const [status, setStatus] = useState<CallStatus>("Loading");
   const [numberToCall, setNumberToCall] = useState("");
   const [muted, setMuted] = useState(false);
-
-  // ⭐ NEW — Upgrade 4 states
-  const [hold, setHold] = useState(false);
   const [speaker, setSpeaker] = useState(false);
-
   const [error, setError] = useState<string | null>(null);
 
   const [callStart, setCallStart] = useState<number | null>(null);
@@ -161,7 +157,6 @@ export default function SoftphonePage() {
 
       setCall(null);
       setMuted(false);
-      setHold(false);
       setSpeaker(false);
       setCallStart(null);
       setCurrentTo(null);
@@ -218,19 +213,7 @@ export default function SoftphonePage() {
     setMuted(next);
   };
 
-  // ⭐ NEW — Hold
-  const toggleHold = () => {
-    if (!call) return;
-    const next = !hold;
-    try {
-      call.hold(next);
-      setHold(next);
-    } catch (e) {
-      console.error("Hold error:", e);
-    }
-  };
-
-  // ⭐ NEW — Speaker
+  // ⭐ SPEAKER ONLY (HOLD REMOVED)
   const toggleSpeaker = () => {
     if (!device) return;
     const next = !speaker;
@@ -270,7 +253,7 @@ export default function SoftphonePage() {
       subtitle="Call clients directly from the browser using your Twilio number."
     >
       <div className="grid md:grid-cols-[260px,1fr] gap-6">
-        
+
         {/* CONTACTS */}
         <aside className="bg-[#0d0f12] border border-slate-800/70 rounded-2xl p-5 hidden md:block">
           <h2 className="text-sm font-semibold text-slate-300 mb-3">
@@ -313,7 +296,7 @@ export default function SoftphonePage() {
                 <button
                   key={c.number}
                   onClick={() => onSelectContact(c.number)}
-                  className="flex-shrink-0 px-3py-2 rounded-xl bg-slate-900/70 hover:bg-slate-800 text-xs text-left"
+                  className="flex-shrink-0 px-3 py-2 rounded-xl bg-slate-900/70 hover:bg-slate-800 text-xs text-left"
                 >
                   <div>{c.name}</div>
                   <div className="text-[10px] text-slate-400">{c.number}</div>
@@ -390,7 +373,7 @@ export default function SoftphonePage() {
             </span>
           </div>
 
-          {/* ⭐ BUTTON BAR WITH HOLD + SPEAKER + MUTE */}
+          {/* ⭐ BUTTON BAR — HOLD REMOVED */}
           <div className="mt-auto space-y-3">
             {!call ? (
               <button
@@ -410,14 +393,8 @@ export default function SoftphonePage() {
                   🔴 Hang Up
                 </button>
 
-                {/* NEW CONTROL BAR */}
+                {/* CONTROL BAR — NO HOLD */}
                 <div className="grid grid-cols-3 gap-3 mt-3">
-                  <button
-                    onClick={toggleHold}
-                    className="py-2 bg-slate-700 rounded-xl hover:bg-slate-600 text-sm transition"
-                  >
-                    {hold ? "Unhold" : "Hold"}
-                  </button>
 
                   <button
                     onClick={toggleMute}
@@ -432,6 +409,9 @@ export default function SoftphonePage() {
                   >
                     {speaker ? "Speaker Off" : "Speaker On"}
                   </button>
+
+                  {/* Empty placeholder if you want equal spacing */}
+                  <div></div>
                 </div>
               </>
             )}
