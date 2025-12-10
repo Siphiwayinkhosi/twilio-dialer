@@ -168,25 +168,6 @@ logs.forEach((log) => {
           curr[1] > best[1] ? curr : best
         )[0];
 
-  // -----------------------------
-  // Format helpers
-  // -----------------------------
-const formatTime = (iso: string | null) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-
-  return d.toLocaleString("de-DE", {
-    timeZone: "Europe/Berlin",
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-};
 
 
   const formatDuration = (sec: number | null) => {
