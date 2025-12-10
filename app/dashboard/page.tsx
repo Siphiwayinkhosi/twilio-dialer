@@ -166,7 +166,8 @@ logs.forEach((log) => {
       ? null
       : Object.entries(callsPerHour).reduce((best, curr) =>
           curr[1] > best[1] ? curr : best
-        )[0];
+        )[0];};
+
         const formatTime = (iso: string | null) => {
   if (!iso) return "—";
   const d = new Date(iso);
