@@ -140,14 +140,26 @@ export default function DashboardPage() {
     totalCalls === 0 ? 0 : Math.round((outgoingCount / totalCalls) * 100);
 
   // calls per hour for peak hour chart
-  const callsPerHour: Record<number, number> = {};
-  logs.forEach((log) => {
-    if (!log.startedAt) return;
-    const d = new Date(log.startedAt);
-    if (isNaN(d.getTime())) return;
-    const hour = d.getHours(); // 0-23
-    callsPerHour[hour] = (callsPerHour[hour] || 0) + 1;
-  });
+const callsPerHour: Record<number, number> = {};
+
+logs.forEach((log) => {
+  if (!log.startedAt) return;
+
+  const d = new Date(log.startedAt);
+  if (isNaN(d.getTime())) return;
+
+  // Convert to Berlin hour
+  const hour = Number(
+    d.toLocaleString("de-DE", {
+      timeZone: "Europe/Berlin",
+      hour: "2-digit",
+      hour12: false,
+    }).slice(0, 2)
+  );
+
+  callsPerHour[hour] = (callsPerHour[hour] || 0) + 1;
+});
+
 
   const peakHour =
     Object.keys(callsPerHour).length === 0
@@ -159,22 +171,23 @@ export default function DashboardPage() {
   // -----------------------------
   // Format helpers
   // -----------------------------
-  const formatTime = (iso: string | null) => {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "—";
+const formatTime = (iso: string | null) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
 
-    return d.toLocaleString("en-GB", {
-      timeZone: "Africa/Mbabane",
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  };
+  return d.toLocaleString("de-DE", {
+    timeZone: "Europe/Berlin",
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+};
+
 
   const formatDuration = (sec: number | null) => {
     if (!sec || isNaN(sec)) return "0s";
@@ -296,6 +309,19 @@ export default function DashboardPage() {
     URL.revokeObjectURL(url);
   };
 
+  const [dailyStats, setDailyStats] = useState<any[]>([]);
+
+const fetchDailyStats = async () => {
+  const res = await fetch("/api/logs/daily");
+  const json = await res.json();
+  setDailyStats(json);
+};
+
+useEffect(() => {
+  fetchDailyStats();
+}, []);
+
+
   // -----------------------------
   // Render
   // -----------------------------
@@ -325,6 +351,26 @@ export default function DashboardPage() {
                 : "0m 0s"}
             </p>
           </div>
+          <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4">
+  <p className="text-xs text-slate-400 mb-3">Daily Call Count</p>
+
+  {dailyStats.length === 0 && (
+    <p className="text-xs text-slate-500">No data yet.</p>
+  )}
+
+  {dailyStats.map((day: any) => (
+    <div key={day.day} className="flex justify-between pb-2 border-b border-slate-800/50">
+      <span className="text-slate-300 text-xs">
+        {new Date(day.day).toLocaleDateString("de-DE")}
+      </span>
+
+      <span className="text-orange-400 font-semibold text-xs">
+        {day.total_calls} calls
+      </span>
+    </div>
+  ))}
+</div>
+
 
           <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4">
             <p className="text-xs text-slate-400 mb-1">Peak Hour</p>

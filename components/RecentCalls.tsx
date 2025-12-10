@@ -137,19 +137,22 @@ export default function RecentCalls() {
   // ======================
   // HELPERS
   // ======================
-  const formatDate = (iso: string | null) => {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    return d.toLocaleString("en-GB", {
-      timeZone: "Africa/Mbabane",
-      hour12: false,
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+const formatDate = (iso: string | null) => {
+  if (!iso) return "—";
+
+  const d = new Date(iso);
+
+  return d.toLocaleString("de-DE", {
+    timeZone: "Europe/Berlin",
+    hour12: false,
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 
   const formatDuration = (sec: number) =>
     sec ? `${Math.floor(sec / 60)}m ${sec % 60}s` : "0s";
