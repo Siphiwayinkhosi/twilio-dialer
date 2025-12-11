@@ -47,7 +47,7 @@ export default function DashboardPage() {
         status: l.status,
         hidden: l.hidden ?? false,
         notes: l.notes ?? "",
-        recordingUrl: l.recording_url ?? null, // optional column
+        recordingUrl: l.recording_url ?? null,
       }));
 
       setLogs(normalized);
@@ -71,23 +71,19 @@ export default function DashboardPage() {
     events.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === "call_update") {
-          fetchLogs();
-        }
+        if (data.type === "call_update") fetchLogs();
       } catch (err) {
         console.error("SSE parse error:", err);
       }
     };
 
-    events.onerror = (err) => {
-      console.error("SSE connection error:", err);
-    };
+    events.onerror = (err) => console.error("SSE connection error:", err);
 
     return () => events.close();
   }, []);
 
   // -----------------------------
-  // Actions: hide / delete
+  // Actions
   // -----------------------------
   const hideLog = async (id: number) => {
     try {
@@ -108,86 +104,74 @@ export default function DashboardPage() {
   };
 
   // -----------------------------
-  // Stats (based on all logs)
+  // Stats
   // -----------------------------
   const totalCalls = logs.length;
-  const totalSeconds = logs.reduce(
-    (sum, l) => sum + (l.durationSeconds || 0),
-    0
-  );
+  const totalSeconds = logs.reduce((sum, l) => sum + (l.durationSeconds || 0), 0);
   const totalMinutes = Math.round(totalSeconds / 60);
 
-  const completedCount = logs.filter(
-    (l) => l.status.toLowerCase() === "completed"
-  ).length;
-  const missedCount = logs.filter(
-    (l) => l.status.toLowerCase() === "canceled"
-  ).length;
-  const errorCount = logs.filter(
-    (l) => l.status.toLowerCase() === "error"
-  ).length;
+  const completedCount = logs.filter((l) => l.status.toLowerCase() === "completed").length;
+  const missedCount = logs.filter((l) => l.status.toLowerCase() === "canceled").length;
+  const errorCount = logs.filter((l) => l.status.toLowerCase() === "error").length;
 
-  const incomingCount = logs.filter(
-    (l) => l.from !== "+493042430344"
-  ).length;
-  const outgoingCount = logs.filter(
-    (l) => l.from === "+493042430344"
-  ).length;
+  const incomingCount = logs.filter((l) => l.from !== "+493042430344").length;
+  const outgoingCount = logs.filter((l) => l.from === "+493042430344").length;
 
-  const incomingRatio =
-    totalCalls === 0 ? 0 : Math.round((incomingCount / totalCalls) * 100);
-  const outgoingRatio =
-    totalCalls === 0 ? 0 : Math.round((outgoingCount / totalCalls) * 100);
+  const incomingRatio = totalCalls === 0 ? 0 : Math.round((incomingCount / totalCalls) * 100);
+  const outgoingRatio = totalCalls === 0 ? 0 : Math.round((outgoingCount / totalCalls) * 100);
 
-  // calls per hour for peak hour chart
-const callsPerHour: Record<number, number> = {};
+  // -----------------------------
+  // PEAK HOUR
+  // -----------------------------
+  const callsPerHour: Record<number, number> = {};
 
-logs.forEach((log) => {
-  if (!log.startedAt) return;
+  logs.forEach((log) => {
+    if (!log.startedAt) return;
 
-  const d = new Date(log.startedAt);
-  if (isNaN(d.getTime())) return;
+    const d = new Date(log.startedAt);
+    if (isNaN(d.getTime())) return;
 
-  // Convert to Berlin hour
-  const hour = Number(
-    d.toLocaleString("de-DE", {
-      timeZone: "Europe/Berlin",
-      hour: "2-digit",
-      hour12: false,
-    }).slice(0, 2)
-  );
+    const hour = Number(
+      d.toLocaleString("de-DE", {
+        timeZone: "Europe/Berlin",
+        hour: "2-digit",
+        hour12: false,
+      }).slice(0, 2)
+    );
 
-  callsPerHour[hour] = (callsPerHour[hour] || 0) + 1;
-});
-
+    callsPerHour[hour] = (callsPerHour[hour] || 0) + 1;
+  });
 
   const peakHour =
     Object.keys(callsPerHour).length === 0
       ? null
       : Object.entries(callsPerHour).reduce((best, curr) =>
           curr[1] > best[1] ? curr : best
-        )[0];};
+        )[0];
 
-        const formatTime = (iso: string | null) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
+  // -----------------------------
+  // FORMAT TIME (correct location)
+  // -----------------------------
+  const formatTime = (iso: string | null) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "—";
 
-  return d.toLocaleString("de-DE", {
-    timeZone: "Europe/Berlin",
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-};
+    return d.toLocaleString("de-DE", {
+      timeZone: "Europe/Berlin",
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  };
 
-
-
-
+  // -----------------------------
+  // Helpers
+  // -----------------------------
   const formatDuration = (sec: number | null) => {
     if (!sec || isNaN(sec)) return "0s";
     const m = Math.floor(sec / 60);
@@ -209,7 +193,22 @@ logs.forEach((log) => {
   };
 
   // -----------------------------
-  // Filtering + search + hidden
+  // Daily counts
+  // -----------------------------
+  const [dailyStats, setDailyStats] = useState<any[]>([]);
+
+  const fetchDailyStats = async () => {
+    const res = await fetch("/api/logs/daily");
+    const json = await res.json();
+    setDailyStats(json);
+  };
+
+  useEffect(() => {
+    fetchDailyStats();
+  }, []);
+
+  // -----------------------------
+  // Filtering + pagination
   // -----------------------------
   const filteredLogs = useMemo(() => {
     return logs
@@ -241,9 +240,6 @@ logs.forEach((log) => {
       });
   }, [logs, search, filter, showHidden]);
 
-  // -----------------------------
-  // Pagination
-  // -----------------------------
   const pageCount = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
 
@@ -256,7 +252,7 @@ logs.forEach((log) => {
   const goNext = () => setPage((p) => Math.min(pageCount, p + 1));
 
   // -----------------------------
-  // Export to CSV
+  // Export CSV
   // -----------------------------
   const exportCsv = () => {
     const headers = [
@@ -308,21 +304,8 @@ logs.forEach((log) => {
     URL.revokeObjectURL(url);
   };
 
-  const [dailyStats, setDailyStats] = useState<any[]>([]);
-
-const fetchDailyStats = async () => {
-  const res = await fetch("/api/logs/daily");
-  const json = await res.json();
-  setDailyStats(json);
-};
-
-useEffect(() => {
-  fetchDailyStats();
-}, []);
-
-
   // -----------------------------
-  // Render
+  // RENDER
   // -----------------------------
   return (
     <AppShell
@@ -350,27 +333,32 @@ useEffect(() => {
                 : "0m 0s"}
             </p>
           </div>
+
+          {/* DAILY CALL COUNT */}
           <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4">
-  <p className="text-xs text-slate-400 mb-3">Daily Call Count</p>
+            <p className="text-xs text-slate-400 mb-3">Daily Call Count</p>
 
-  {dailyStats.length === 0 && (
-    <p className="text-xs text-slate-500">No data yet.</p>
-  )}
+            {dailyStats.length === 0 && (
+              <p className="text-xs text-slate-500">No data yet.</p>
+            )}
 
-  {dailyStats.map((day: any) => (
-    <div key={day.day} className="flex justify-between pb-2 border-b border-slate-800/50">
-      <span className="text-slate-300 text-xs">
-        {new Date(day.day).toLocaleDateString("de-DE")}
-      </span>
+            {dailyStats.map((day: any) => (
+              <div
+                key={day.day}
+                className="flex justify-between pb-2 border-b border-slate-800/50"
+              >
+                <span className="text-slate-300 text-xs">
+                  {new Date(day.day).toLocaleDateString("de-DE")}
+                </span>
 
-      <span className="text-orange-400 font-semibold text-xs">
-        {day.total_calls} calls
-      </span>
-    </div>
-  ))}
-</div>
+                <span className="text-orange-400 font-semibold text-xs">
+                  {day.total_calls} calls
+                </span>
+              </div>
+            ))}
+          </div>
 
-
+          {/* PEAK HOUR */}
           <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4">
             <p className="text-xs text-slate-400 mb-1">Peak Hour</p>
             <p className="text-2xl font-semibold">
@@ -379,9 +367,9 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* CATEGORY ANALYTICS + EXPORT */}
+        {/* CATEGORY STATS */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Status counts (bar style) */}
+          {/* STATUS DISTRIBUTION */}
           <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4">
             <p className="text-xs text-slate-400 mb-2">Status Distribution</p>
             {[
@@ -416,8 +404,11 @@ useEffect(() => {
           <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4">
             <p className="text-xs text-slate-400 mb-2">Incoming vs Outgoing</p>
             <div className="flex items-center gap-3 mb-2 text-xs text-slate-300">
-              <span>Incoming: {incomingCount} ({incomingRatio}%)</span>
+              <span>
+                Incoming: {incomingCount} ({incomingRatio}%)
+              </span>
             </div>
+
             <div className="w-full h-2 rounded-full bg-slate-800 mb-4">
               <div
                 className="h-2 rounded-full bg-blue-500"
@@ -426,8 +417,11 @@ useEffect(() => {
             </div>
 
             <div className="flex items-center gap-3 mb-2 text-xs text-slate-300">
-              <span>Outgoing: {outgoingCount} ({outgoingRatio}%)</span>
+              <span>
+                Outgoing: {outgoingCount} ({outgoingRatio}%)
+              </span>
             </div>
+
             <div className="w-full h-2 rounded-full bg-slate-800">
               <div
                 className="h-2 rounded-full bg-orange-500"
@@ -436,7 +430,7 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Export */}
+          {/* EXPORT */}
           <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
             <div>
               <p className="text-xs text-slate-400 mb-2">Data Tools</p>
@@ -444,6 +438,7 @@ useEffect(() => {
                 Export current filtered view as CSV for reporting or backup.
               </p>
             </div>
+
             <button
               onClick={exportCsv}
               className="mt-2 px-4 py-2 rounded-xl bg-orange-600 text-white text-sm hover:bg-orange-700"
@@ -453,7 +448,7 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Controls: search + show hidden + filters */}
+        {/* SEARCH / FILTERS */}
         <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4 space-y-4">
           {/* Search */}
           <input
@@ -467,7 +462,7 @@ useEffect(() => {
             className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-sm text-slate-200 focus:border-orange-500 outline-none"
           />
 
-          {/* Show hidden toggle */}
+          {/* Show Hidden */}
           <button
             onClick={() => setShowHidden((prev) => !prev)}
             className="px-3 py-1 rounded-lg border border-slate-700 text-slate-300 text-xs hover:bg-slate-800"
@@ -503,7 +498,7 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Table */}
+        {/* CALL TABLE */}
         <div className="bg-[#0d0f12] border border-slate-800 rounded-2xl p-4">
           <h2 className="text-sm font-semibold mb-3">Recent Calls</h2>
 
@@ -518,9 +513,7 @@ useEffect(() => {
                   <thead className="text-slate-400 text-xs">
                     <tr className="border-b border-slate-800">
                       <th className="py-2 text-left">To</th>
-                      <th className="py-2 text-left hidden sm:table-cell">
-                        From
-                      </th>
+                      <th className="py-2 text-left hidden sm:table-cell">From</th>
                       <th className="py-2 text-left">Started</th>
                       <th className="py-2 text-left">Duration</th>
                       <th className="py-2 text-left">Status</th>
@@ -560,12 +553,10 @@ useEffect(() => {
                           {log.status}
                         </td>
 
-                        {/* Notes view */}
                         <td className="py-2 text-xs sm:text-sm text-slate-300 max-w-[200px] truncate">
                           {log.notes || "—"}
                         </td>
 
-                        {/* Recording download */}
                         <td className="py-2 text-xs sm:text-sm">
                           {log.recordingUrl ? (
                             <a
@@ -603,12 +594,12 @@ useEffect(() => {
                 </table>
               </div>
 
-              {/* Pagination controls */}
+              {/* PAGINATION */}
               <div className="flex items-center justify-between mt-4 text-xs text-slate-400">
                 <span>
-                  Page {currentPage} of {pageCount} · {filteredLogs.length}{" "}
-                  calls
+                  Page {currentPage} of {pageCount} · {filteredLogs.length} calls
                 </span>
+
                 <div className="flex gap-2">
                   <button
                     onClick={goPrev}
@@ -617,6 +608,7 @@ useEffect(() => {
                   >
                     Prev
                   </button>
+
                   <button
                     onClick={goNext}
                     disabled={currentPage === pageCount}
@@ -633,3 +625,4 @@ useEffect(() => {
     </AppShell>
   );
 }
+
