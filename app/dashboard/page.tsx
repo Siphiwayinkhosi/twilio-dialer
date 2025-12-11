@@ -29,6 +29,8 @@ export default function DashboardPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [page, setPage] = useState(1);
 
+  const [dailyStats, setDailyStats] = useState<any[]>([]);
+
   // -----------------------------
   // Fetch logs
   // -----------------------------
@@ -83,7 +85,24 @@ export default function DashboardPage() {
   }, []);
 
   // -----------------------------
-  // Actions
+  // Daily stats
+  // -----------------------------
+  const fetchDailyStats = async () => {
+    try {
+      const res = await fetch("/api/logs/daily");
+      const json = await res.json();
+      setDailyStats(json);
+    } catch (e) {
+      console.error("Failed to load daily stats", e);
+    }
+  };
+
+  useEffect(() => {
+    fetchDailyStats();
+  }, []);
+
+  // -----------------------------
+  // Actions: hide / delete
   // -----------------------------
   const hideLog = async (id: number) => {
     try {
@@ -104,27 +123,41 @@ export default function DashboardPage() {
   };
 
   // -----------------------------
-  // Stats
+  // Stats (based on all logs)
   // -----------------------------
   const totalCalls = logs.length;
-  const totalSeconds = logs.reduce((sum, l) => sum + (l.durationSeconds || 0), 0);
+  const totalSeconds = logs.reduce(
+    (sum, l) => sum + (l.durationSeconds || 0),
+    0
+  );
   const totalMinutes = Math.round(totalSeconds / 60);
 
-  const completedCount = logs.filter((l) => l.status.toLowerCase() === "completed").length;
-  const missedCount = logs.filter((l) => l.status.toLowerCase() === "canceled").length;
-  const errorCount = logs.filter((l) => l.status.toLowerCase() === "error").length;
+  const completedCount = logs.filter(
+    (l) => l.status.toLowerCase() === "completed"
+  ).length;
+  const missedCount = logs.filter(
+    (l) => l.status.toLowerCase() === "canceled"
+  ).length;
+  const errorCount = logs.filter(
+    (l) => l.status.toLowerCase() === "error"
+  ).length;
 
-  const incomingCount = logs.filter((l) => l.from !== "+493042430344").length;
-  const outgoingCount = logs.filter((l) => l.from === "+493042430344").length;
+  const incomingCount = logs.filter(
+    (l) => l.from !== "+493042430344"
+  ).length;
+  const outgoingCount = logs.filter(
+    (l) => l.from === "+493042430344"
+  ).length;
 
-  const incomingRatio = totalCalls === 0 ? 0 : Math.round((incomingCount / totalCalls) * 100);
-  const outgoingRatio = totalCalls === 0 ? 0 : Math.round((outgoingCount / totalCalls) * 100);
+  const incomingRatio =
+    totalCalls === 0 ? 0 : Math.round((incomingCount / totalCalls) * 100);
+  const outgoingRatio =
+    totalCalls === 0 ? 0 : Math.round((outgoingCount / totalCalls) * 100);
 
   // -----------------------------
-  // PEAK HOUR
+  // Peak hour (Europe/Berlin)
   // -----------------------------
   const callsPerHour: Record<number, number> = {};
-
   logs.forEach((log) => {
     if (!log.startedAt) return;
 
@@ -132,11 +165,13 @@ export default function DashboardPage() {
     if (isNaN(d.getTime())) return;
 
     const hour = Number(
-      d.toLocaleString("de-DE", {
-        timeZone: "Europe/Berlin",
-        hour: "2-digit",
-        hour12: false,
-      }).slice(0, 2)
+      d
+        .toLocaleString("de-DE", {
+          timeZone: "Europe/Berlin",
+          hour: "2-digit",
+          hour12: false,
+        })
+        .slice(0, 2)
     );
 
     callsPerHour[hour] = (callsPerHour[hour] || 0) + 1;
@@ -150,7 +185,7 @@ export default function DashboardPage() {
         )[0];
 
   // -----------------------------
-  // FORMAT TIME (correct location)
+  // Helpers
   // -----------------------------
   const formatTime = (iso: string | null) => {
     if (!iso) return "—";
@@ -169,9 +204,6 @@ export default function DashboardPage() {
     });
   };
 
-  // -----------------------------
-  // Helpers
-  // -----------------------------
   const formatDuration = (sec: number | null) => {
     if (!sec || isNaN(sec)) return "0s";
     const m = Math.floor(sec / 60);
@@ -193,22 +225,7 @@ export default function DashboardPage() {
   };
 
   // -----------------------------
-  // Daily counts
-  // -----------------------------
-  const [dailyStats, setDailyStats] = useState<any[]>([]);
-
-  const fetchDailyStats = async () => {
-    const res = await fetch("/api/logs/daily");
-    const json = await res.json();
-    setDailyStats(json);
-  };
-
-  useEffect(() => {
-    fetchDailyStats();
-  }, []);
-
-  // -----------------------------
-  // Filtering + pagination
+  // Filtering + search + hidden
   // -----------------------------
   const filteredLogs = useMemo(() => {
     return logs
@@ -240,6 +257,9 @@ export default function DashboardPage() {
       });
   }, [logs, search, filter, showHidden]);
 
+  // -----------------------------
+  // Pagination
+  // -----------------------------
   const pageCount = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
 
@@ -305,7 +325,7 @@ export default function DashboardPage() {
   };
 
   // -----------------------------
-  // RENDER
+  // Render
   // -----------------------------
   return (
     <AppShell
@@ -408,7 +428,6 @@ export default function DashboardPage() {
                 Incoming: {incomingCount} ({incomingRatio}%)
               </span>
             </div>
-
             <div className="w-full h-2 rounded-full bg-slate-800 mb-4">
               <div
                 className="h-2 rounded-full bg-blue-500"
@@ -421,7 +440,6 @@ export default function DashboardPage() {
                 Outgoing: {outgoingCount} ({outgoingRatio}%)
               </span>
             </div>
-
             <div className="w-full h-2 rounded-full bg-slate-800">
               <div
                 className="h-2 rounded-full bg-orange-500"
@@ -438,7 +456,6 @@ export default function DashboardPage() {
                 Export current filtered view as CSV for reporting or backup.
               </p>
             </div>
-
             <button
               onClick={exportCsv}
               className="mt-2 px-4 py-2 rounded-xl bg-orange-600 text-white text-sm hover:bg-orange-700"
@@ -513,7 +530,9 @@ export default function DashboardPage() {
                   <thead className="text-slate-400 text-xs">
                     <tr className="border-b border-slate-800">
                       <th className="py-2 text-left">To</th>
-                      <th className="py-2 text-left hidden sm:table-cell">From</th>
+                      <th className="py-2 text-left hidden sm:table-cell">
+                        From
+                      </th>
                       <th className="py-2 text-left">Started</th>
                       <th className="py-2 text-left">Duration</th>
                       <th className="py-2 text-left">Status</th>
@@ -553,10 +572,12 @@ export default function DashboardPage() {
                           {log.status}
                         </td>
 
+                        {/* Notes view */}
                         <td className="py-2 text-xs sm:text-sm text-slate-300 max-w-[200px] truncate">
                           {log.notes || "—"}
                         </td>
 
+                        {/* Recording download */}
                         <td className="py-2 text-xs sm:text-sm">
                           {log.recordingUrl ? (
                             <a
@@ -599,7 +620,6 @@ export default function DashboardPage() {
                 <span>
                   Page {currentPage} of {pageCount} · {filteredLogs.length} calls
                 </span>
-
                 <div className="flex gap-2">
                   <button
                     onClick={goPrev}
@@ -608,7 +628,6 @@ export default function DashboardPage() {
                   >
                     Prev
                   </button>
-
                   <button
                     onClick={goNext}
                     disabled={currentPage === pageCount}
@@ -625,4 +644,3 @@ export default function DashboardPage() {
     </AppShell>
   );
 }
-
